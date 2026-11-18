@@ -80,6 +80,16 @@ class SettingsStore {
   static const _kDanmakuDefaultHostId = 'danmakuDefaultHostId';
   static const _kIptvSources = 'iptvSources';
   static const _kIptvSelectedSourceId = 'iptvSelectedSourceId';
+  static const kSoftwareVideoDecoding = 'softwareVideoDecoding';
+
+  /// Uses FFmpeg software decoding instead of the device's default decoder.
+  /// This is read before the player backend is registered, so it takes effect
+  /// after restarting the app.
+  bool get softwareVideoDecoding =>
+      _store.getString(kSoftwareVideoDecoding) == 'true';
+
+  Future<void> setSoftwareVideoDecoding(bool value) =>
+      _store.setString(kSoftwareVideoDecoding, value ? 'true' : 'false');
 
   /// Load the backing store, then apply the build-time config: a non-empty
   /// `CMS_SITES_JSON` / `IPTV_PLAYLIST_URL` / `DANMAKU_BASE_URL`+`DANMAKU_TOKEN`

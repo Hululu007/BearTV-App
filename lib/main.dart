@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:fvp/fvp.dart' as fvp;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
+import 'data/settings_store.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Playback backend: route video_player through fvp (libmdk) instead of the
   // platform default (ExoPlayer). The win here is not raw decode performance
@@ -11,11 +13,14 @@ void main() {
   // auto-reconnect on transient HTTP errors, and cache demuxed packet ranges so
   // flaky/slow CMS sources on a weak network stall less.
   //
-  // NOTE: `tunnel` is deliberately left off — it outputs the decoder straight
-  // to the surface with no OpenGL texture, which would break the `VideoPlayer`
-  // texture widget and the danmaku overlay composited on top. Hardware decoding
-  // is on by default, so we don't force `video.decoders`.
+  // Keep the existing render path by default. Force software decoding only for
+  // device diagnostics: --dart-define=SOFTWARE_VIDEO_DECODING=true.
+  // This bypasses hardware decoding; it does not guarantee fast playback.
+  final prefs = await SharedPreferences.getInstance();
+  final softwareDecoding =
+      prefs.getString(SettingsStore.kSoftwareVideoDecoding) == 'true';
   fvp.registerWith(options: {
+    if (softwareDecoding) 'video.decoders': ['FFmpeg'],
     // DeX on this box outputs 1080p. Cap the GL texture at 1080p so a 4K
     // source does not pay for a 4K GPU copy; decoding still uses the hardware
     // decoder at the source resolution.

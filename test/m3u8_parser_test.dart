@@ -64,6 +64,35 @@ v.m3u8
   });
 
   group('media', () {
+    test('rewrite preserves decoder boundaries, sequence and protocol version',
+        () {
+      final playlist = M3u8Parser.parseMedia('''
+#EXTM3U
+#EXT-X-VERSION:7
+#EXT-X-DISCONTINUITY-SEQUENCE:4
+#EXTINF:6,
+first.ts
+#EXT-X-DISCONTINUITY
+#EXTINF:6,
+second.ts
+#EXTINF:6,
+third.ts
+#EXT-X-ENDLIST
+''', Uri.parse(_base));
+      expect(
+          playlist.segments.map((s) => s.discontinuity), [false, true, false]);
+      final text = M3u8Parser.rewrite(playlist,
+          keyNames: const {},
+          mapNames: const {},
+          segmentNames: const ['a.ts', 'b.ts', 'c.ts']);
+      expect(text, contains('#EXT-X-VERSION:7\n'));
+      expect(text, contains('#EXT-X-DISCONTINUITY-SEQUENCE:4\n'));
+      expect(text, contains('a.ts\n#EXT-X-DISCONTINUITY\n#EXTINF:6,\nb.ts'));
+      final reparsed = M3u8Parser.parseMedia(text, Uri.parse(_base));
+      expect(
+          reparsed.segments.map((s) => s.discontinuity), [false, true, false]);
+    });
+
     const media = '''
 #EXTM3U
 #EXT-X-VERSION:3
@@ -260,6 +289,7 @@ s2.m4s
           mapNames: {map: 'init_0.mp4'},
           segmentNames: const ['s1.m4s', 's2.m4s']);
       expect(text, contains('#EXT-X-MAP:URI="init_0.mp4"'));
+      expect(text, contains('#EXT-X-VERSION:6\n'));
       expect(text, isNot(contains('BYTERANGE="720@0"')));
       // The map tag is emitted once for the whole run.
       expect('#EXT-X-MAP'.allMatches(text).length, 1);

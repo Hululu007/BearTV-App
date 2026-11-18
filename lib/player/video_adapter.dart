@@ -5,7 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import 'player_controller.dart';
 
-/// Real playback backend wrapping `video_player` (Android = ExoPlayer).
+/// Real playback backend wrapping `video_player` (fvp/libmdk registered in main).
 ///
 /// Chosen for low-end TV boxes: small binary, low memory, native HLS/m3u8/mp4,
 /// `setPlaybackSpeed` + `seekTo`. The underlying [VideoPlayerController] is

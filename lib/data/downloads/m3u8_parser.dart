@@ -90,6 +90,7 @@ class M3u8Segment {
   final String durationText;
   final M3u8Key? key;
   final M3u8Map? map;
+  final bool discontinuity;
 
   const M3u8Segment({
     required this.uri,
@@ -99,6 +100,7 @@ class M3u8Segment {
     this.rangeLength,
     this.key,
     this.map,
+    this.discontinuity = false,
   });
 
   bool get hasRange => rangeStart != null && rangeLength != null;
@@ -115,6 +117,8 @@ class M3u8MediaPlaylist {
   final int mediaSequence;
   final bool finished;
   final int durationMs;
+  final int version;
+  final int discontinuitySequence;
 
   const M3u8MediaPlaylist({
     required this.segments,
@@ -123,6 +127,8 @@ class M3u8MediaPlaylist {
     required this.mediaSequence,
     required this.finished,
     required this.durationMs,
+    this.version = 3,
+    this.discontinuitySequence = 0,
   });
 }
 
@@ -205,6 +211,9 @@ class M3u8Parser {
     var ended = false;
     var vodType = false;
     var totalMs = 0;
+    var version = 3;
+    var discontinuitySequence = 0;
+    var discontinuity = false;
     String? pendingRange;
     String? pendingDuration;
     // Implicit BYTERANGE offsets follow the previous sub-range of the same URI.
@@ -214,6 +223,19 @@ class M3u8Parser {
       final line = raw.trim();
       if (line.isEmpty) continue;
 
+      if (line.startsWith('#EXT-X-VERSION:')) {
+        version = _int(line.substring('#EXT-X-VERSION:'.length)) ?? 3;
+        continue;
+      }
+      if (line.startsWith('#EXT-X-DISCONTINUITY-SEQUENCE:')) {
+        discontinuitySequence =
+            _int(line.substring('#EXT-X-DISCONTINUITY-SEQUENCE:'.length)) ?? 0;
+        continue;
+      }
+      if (line == '#EXT-X-DISCONTINUITY') {
+        discontinuity = true;
+        continue;
+      }
       if (line.startsWith('#EXT-X-I-FRAMES-ONLY')) {
         throw const M3u8Exception('该资源为 I-frame 切片，暂不支持下载');
       }
@@ -314,7 +336,9 @@ class M3u8Parser {
         rangeLength: rangeLength,
         key: currentKey,
         map: currentMap,
+        discontinuity: discontinuity,
       ));
+      discontinuity = false;
     }
 
     if (segments.isEmpty) {
@@ -330,6 +354,8 @@ class M3u8Parser {
       mediaSequence: mediaSequence,
       finished: true,
       durationMs: totalMs,
+      version: version,
+      discontinuitySequence: discontinuitySequence,
     );
   }
 
@@ -345,9 +371,14 @@ class M3u8Parser {
   }) {
     final out = StringBuffer()
       ..writeln('#EXTM3U')
-      ..writeln('#EXT-X-VERSION:3')
+      ..writeln(
+          '#EXT-X-VERSION:${playlist.maps.isNotEmpty && playlist.version < 6 ? 6 : playlist.version}')
       ..writeln('#EXT-X-PLAYLIST-TYPE:VOD')
       ..writeln('#EXT-X-MEDIA-SEQUENCE:${playlist.mediaSequence}');
+    if (playlist.discontinuitySequence != 0) {
+      out.writeln(
+          '#EXT-X-DISCONTINUITY-SEQUENCE:${playlist.discontinuitySequence}');
+    }
 
     var maxDuration = 0.0;
     for (final s in playlist.segments) {
@@ -359,6 +390,9 @@ class M3u8Parser {
     String? lastMapSig;
     for (var i = 0; i < playlist.segments.length; i++) {
       final seg = playlist.segments[i];
+      // A boundary can reset timestamps or decoder parameters. Keeping only
+      // EXTINF/URIs changes playback semantics even when the bytes are intact.
+      if (seg.discontinuity) out.writeln('#EXT-X-DISCONTINUITY');
       final key = seg.key;
       if (key != null) {
         final sig = '${key.method}|${key.uri}|${key.iv}|${key.keyFormat}';

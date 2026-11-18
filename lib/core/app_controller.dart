@@ -113,6 +113,13 @@ class AppController extends ChangeNotifier {
   /// TMDB key in production).
   bool get hasApiKey => _injectedRepo != null || settings.tmdbApiKey.isNotEmpty;
 
+  bool get softwareVideoDecoding => settings.softwareVideoDecoding;
+
+  Future<void> setSoftwareVideoDecoding(bool value) async {
+    await settings.setSoftwareVideoDecoding(value);
+    notifyListeners();
+  }
+
   // Isolated notifiers for high-frequency / localized updates.
   final ValueNotifier<String?> heroBg = ValueNotifier<String?>(null);
   final ValueNotifier<ToastEvent?> toast = ValueNotifier<ToastEvent?>(null);
@@ -794,9 +801,8 @@ class AppController extends ChangeNotifier {
       } else {
         detail = await vodRepo.resolveByTitle(item.title, sites);
         if (token != _playToken) return; // superseded by a newer openTitle
-        detail ??=
-            downloads.snapshotForEntry(entry) ??
-                downloads.snapshotForItem(item.key);
+        detail ??= downloads.snapshotForEntry(entry) ??
+            downloads.snapshotForItem(item.key);
       }
     }
 
@@ -1623,12 +1629,10 @@ class AppController extends ChangeNotifier {
     final v = player.value;
     var target = v.position + delta;
     if (target < Duration.zero) target = Duration.zero;
-    final limit = playingPartial
-        ? Duration(milliseconds: _partialTotalMs())
-        : v.duration;
+    final limit =
+        playingPartial ? Duration(milliseconds: _partialTotalMs()) : v.duration;
     if (limit > Duration.zero && target > limit) target = limit;
-    if (playingPartial &&
-        target.inMilliseconds > _partialFrontierMs() - 3000) {
+    if (playingPartial && target.inMilliseconds > _partialFrontierMs() - 3000) {
       await _leavePartialToOnline(seekToMs: target.inMilliseconds);
       return;
     }
@@ -1688,8 +1692,7 @@ class AppController extends ChangeNotifier {
       _lastSaveMs = now;
       _persistHistory(
         positionMs: pos.inMilliseconds,
-        durationMs:
-            playingPartial ? _partialTotalMs() : dur.inMilliseconds,
+        durationMs: playingPartial ? _partialTotalMs() : dur.inMilliseconds,
       );
     }
   }

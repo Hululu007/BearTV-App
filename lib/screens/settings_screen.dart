@@ -350,6 +350,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                               const SizedBox(height: 22),
                               _sectionCard(
+                                title: '视频解码',
+                                subtitle:
+                                    '默认使用设备解码器。开启软件解码可用于排查绿条、花屏和倍速播放问题；修改后需要完全重启应用才会生效。',
+                                child: const _VideoDecoderSection(),
+                              ),
+                              const SizedBox(height: 22),
+                              _sectionCard(
                                 title: '版本更新',
                                 subtitle:
                                     '检查仓库 main 分支 pubspec.yaml 声明的版本；发现新版本时按当前设备架构下载对应 APK，下载完成后交给系统安装器完成更新。',
@@ -665,6 +672,36 @@ class _SearchImeSection extends StatelessWidget {
         const SizedBox(width: 14),
         Text(
           on ? '原生输入框 · 确定呼出系统键盘' : '内置离线拼音键盘',
+          style: const TextStyle(
+              fontSize: 15,
+              color: AppColors.textDim,
+              fontFamilyFallback: kFontFallback),
+        ),
+      ],
+    );
+  }
+}
+
+class _VideoDecoderSection extends StatelessWidget {
+  const _VideoDecoderSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final software = app.softwareVideoDecoding;
+    return Row(
+      children: [
+        _Btn(
+          label: software ? '软件解码：已开启' : '设备解码：已开启',
+          primary: software,
+          onPressed: () async {
+            await app.setSoftwareVideoDecoding(!software);
+            app.showToast('已保存，完全重启应用后生效');
+          },
+        ),
+        const SizedBox(width: 14),
+        Text(
+          software ? 'FFmpeg 软件解码' : '默认硬件/系统解码',
           style: const TextStyle(
               fontSize: 15,
               color: AppColors.textDim,

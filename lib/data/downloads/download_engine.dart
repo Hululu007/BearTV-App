@@ -418,6 +418,8 @@ class HttpDownloadEngine implements DownloadEngine {
         mediaSequence: playlist.mediaSequence,
         finished: true,
         durationMs: durationMs,
+        version: playlist.version,
+        discontinuitySequence: playlist.discontinuitySequence,
       );
       final text = M3u8Parser.rewrite(
         prefix,
