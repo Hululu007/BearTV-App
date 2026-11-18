@@ -11,6 +11,8 @@ class PlayerValue {
   final Duration duration;
   final Duration buffered; // how far ahead the stream is cached
   final double speed;
+  final bool completed;
+  final String? error;
 
   const PlayerValue({
     this.playing = false,
@@ -20,6 +22,8 @@ class PlayerValue {
     this.duration = Duration.zero,
     this.buffered = Duration.zero,
     this.speed = 1.0,
+    this.completed = false,
+    this.error,
   });
 
   double get progress => duration.inMilliseconds == 0
@@ -39,6 +43,8 @@ class PlayerValue {
     Duration? duration,
     Duration? buffered,
     double? speed,
+    bool? completed,
+    String? error,
   }) =>
       PlayerValue(
         playing: playing ?? this.playing,
@@ -48,6 +54,8 @@ class PlayerValue {
         duration: duration ?? this.duration,
         buffered: buffered ?? this.buffered,
         speed: speed ?? this.speed,
+        completed: completed ?? this.completed,
+        error: error ?? this.error,
       );
 }
 

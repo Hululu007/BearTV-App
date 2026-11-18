@@ -349,6 +349,13 @@ class _PlayStateBadge extends StatelessWidget {
       valueListenable: app.player,
       builder: (context, v, _) {
         if (v.playing) return const SizedBox.shrink();
+        if (v.error != null) {
+          return _playbackBadge(
+              Icons.error_outline_rounded, '播放错误\n${v.error}');
+        }
+        if (v.completed) {
+          return _playbackBadge(Icons.stop_circle_outlined, '播放结束');
+        }
         // Opening or waiting on the network → not a pause; show buffering.
         if (v.buffering || !v.ready) {
           return const Center(
@@ -359,41 +366,44 @@ class _PlayStateBadge extends StatelessWidget {
                     fontFamilyFallback: kFontFallback)),
           );
         }
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 96,
-                height: 96,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: const Color(0x73000000),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0x80FFFFFF), width: 2),
-                ),
-                child: const Icon(Icons.pause_rounded,
-                    size: 54, color: AppColors.text),
-              ),
-              const SizedBox(height: 14),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                decoration: BoxDecoration(
-                  color: const Color(0x59000000),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text('已暂停',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.text,
-                        fontFamilyFallback: kFontFallback)),
-              ),
-            ],
-          ),
-        );
+        return _playbackBadge(Icons.pause_rounded, '已暂停');
       },
+    );
+  }
+
+  Widget _playbackBadge(IconData icon, String label) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 96,
+            height: 96,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0x73000000),
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0x80FFFFFF), width: 2),
+            ),
+            child: Icon(icon, size: 54, color: AppColors.text),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0x59000000),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.text,
+                    fontFamilyFallback: kFontFallback)),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -421,17 +431,14 @@ class _CacheBadge extends StatelessWidget {
           color: const Color(0x99000000),
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-              color: partial
-                  ? const Color(0x55F2C14E)
-                  : const Color(0x5548E08A)),
+              color:
+                  partial ? const Color(0x55F2C14E) : const Color(0x5548E08A)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              partial
-                  ? Icons.downloading_rounded
-                  : Icons.offline_pin_rounded,
+              partial ? Icons.downloading_rounded : Icons.offline_pin_rounded,
               size: 17,
               color: partial ? const Color(0xFFF2C14E) : AppColors.live,
             ),
@@ -884,9 +891,8 @@ class _ActionSheetState extends State<_ActionSheet> {
                 width: 720,
                 constraints: BoxConstraints(
                     maxHeight: MediaQuery.sizeOf(context).height * 0.72),
-                padding: const EdgeInsets.fromLTRB(
-                    30 - kFocusSlack, 24 - kFocusSlack, 30 - kFocusSlack,
-                    28 - kFocusSlack),
+                padding: const EdgeInsets.fromLTRB(30 - kFocusSlack,
+                    24 - kFocusSlack, 30 - kFocusSlack, 28 - kFocusSlack),
                 decoration: BoxDecoration(
                   color: AppColors.cardBg,
                   borderRadius: BorderRadius.circular(22),
@@ -1612,11 +1618,8 @@ class _FullscreenMenuState extends State<_FullscreenMenu> {
           constraints: BoxConstraints(
             maxHeight: MediaQuery.sizeOf(context).height * 0.6,
           ),
-          padding: const EdgeInsets.fromLTRB(
-              AppDims.pad - kFocusSlack,
-              26 - kFocusSlack,
-              AppDims.pad - kFocusSlack,
-              34 - kFocusSlack),
+          padding: const EdgeInsets.fromLTRB(AppDims.pad - kFocusSlack,
+              26 - kFocusSlack, AppDims.pad - kFocusSlack, 34 - kFocusSlack),
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.bottomCenter,
@@ -1741,11 +1744,8 @@ class _EpisodeSheetState extends State<_EpisodeSheet> {
           constraints: BoxConstraints(
             maxHeight: MediaQuery.sizeOf(context).height * 0.68,
           ),
-          padding: const EdgeInsets.fromLTRB(
-              AppDims.pad - kFocusSlack,
-              26 - kFocusSlack,
-              AppDims.pad - kFocusSlack,
-              34 - kFocusSlack),
+          padding: const EdgeInsets.fromLTRB(AppDims.pad - kFocusSlack,
+              26 - kFocusSlack, AppDims.pad - kFocusSlack, 34 - kFocusSlack),
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.bottomCenter,

@@ -19,6 +19,9 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
   PlayerValue _value = const PlayerValue();
   double _speed = 1.0;
   int _openToken = 0;
+  String? _url;
+  bool? _lastCompleted;
+  String? _lastError;
 
   VideoPlayerController? get raw => _vp;
 
@@ -28,6 +31,9 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
   @override
   Future<void> open(String? url, {Map<String, String>? headers}) async {
     final token = ++_openToken;
+    _url = url;
+    _lastCompleted = null;
+    _lastError = null;
     await _disposeInner();
     _value = PlayerValue(speed: _speed); // not ready yet
     notifyListeners();
@@ -78,6 +84,17 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
     final vp = _vp;
     if (vp == null) return;
     final v = vp.value;
+    final error = v.hasError ? v.errorDescription : null;
+    if (v.isCompleted != _lastCompleted || error != _lastError) {
+      debugPrint(
+        '[video] url=${_url ?? ''} playing=${v.isPlaying} '
+        'buffering=${v.isBuffering} positionMs=${v.position.inMilliseconds} '
+        'durationMs=${v.duration.inMilliseconds} speed=$_speed '
+        'completed=${v.isCompleted} error=${error ?? ''}',
+      );
+      _lastCompleted = v.isCompleted;
+      _lastError = error;
+    }
     _value = _value.copyWith(
       playing: v.isPlaying,
       buffering: v.isBuffering,
@@ -86,6 +103,8 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
       duration: v.duration,
       buffered: _bufferedEnd(v),
       speed: _speed,
+      completed: v.isCompleted,
+      error: error,
     );
     notifyListeners();
   }
