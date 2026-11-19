@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
@@ -22,6 +23,9 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
   String? _url;
   bool? _lastCompleted;
   String? _lastError;
+  Timer? _seekTimer;
+  Duration? _pendingSeek;
+  bool _seekInFlight = false;
 
   VideoPlayerController? get raw => _vp;
 
@@ -132,7 +136,36 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
   Future<void> togglePlay() => _value.playing ? pause() : play();
 
   @override
-  Future<void> seekTo(Duration position) async => _vp?.seekTo(position);
+  Future<void> seekTo(Duration position) async {
+    _pendingSeek = position;
+    _seekTimer?.cancel();
+    _seekTimer = Timer(const Duration(milliseconds: 80), () async {
+      if (_seekInFlight) {
+        _seekTimer = Timer(const Duration(milliseconds: 80), () async {
+          final next = _pendingSeek;
+          _pendingSeek = null;
+          if (next != null) await _vp?.seekTo(next);
+        });
+        return;
+      }
+      final target = _pendingSeek;
+      _pendingSeek = null;
+      if (target == null) return;
+      _seekInFlight = true;
+      try {
+        await _vp?.seekTo(target);
+      } finally {
+        _seekInFlight = false;
+        if (_pendingSeek != null) {
+          _seekTimer = Timer(const Duration(milliseconds: 80), () async {
+            final next = _pendingSeek;
+            _pendingSeek = null;
+            if (next != null) await _vp?.seekTo(next);
+          });
+        }
+      }
+    });
+  }
 
   @override
   Future<void> setSpeed(double speed) async {
@@ -142,6 +175,9 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
   }
 
   Future<void> _disposeInner() async {
+    _seekTimer?.cancel();
+    _seekTimer = null;
+    _pendingSeek = null;
     final vp = _vp;
     _vp = null;
     if (vp != null) {
