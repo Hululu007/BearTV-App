@@ -393,13 +393,14 @@ class _HomeScreenState extends State<HomeScreen> {
             runSpacing: 10,
             children: [
               for (var i = 0; i < kSegments.length; i++)
-                SelectableChip(
-                  label: kSegments[i],
-                  selected: app.segIndex == i,
-                  onPressed: () {
-                    app.selectSegment(i);
-                  },
-                ),
+                if (!(app.currentTab == 4 && i == 4))
+                  SelectableChip(
+                    label: kSegments[i],
+                    selected: app.segIndex == i,
+                    onPressed: () {
+                      app.selectSegment(i);
+                    },
+                  ),
             ],
           ),
           const SizedBox(height: 20),

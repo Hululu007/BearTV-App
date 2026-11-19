@@ -30,7 +30,7 @@ const List<int> kTabOrder = [kIptvTab, 0, 1, 2, 3, 4, 5, 6, 7];
 /// Segment chips under 全部片库. Each maps to a TMDB sort/filter mode
 /// (see TmdbRepository): 热门=popularity, 高分=vote_average, 最新=release date,
 /// 经典=vote_count.
-const List<String> kSegments = ['热门', '高分', '最新', '经典'];
+const List<String> kSegments = ['热门', '高分', '最新', '经典', '中国'];
 
 /// Playback speed presets (BearTV PLAYBACK_RATES). Remembered per title.
 const List<double> kPlaybackRates = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];

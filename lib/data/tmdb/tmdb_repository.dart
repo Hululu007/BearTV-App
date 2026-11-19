@@ -20,6 +20,9 @@ class TmdbRepository implements ContentRepository {
     if (tabIndex == 0) return FeedPage.empty;
 
     final names = await _api.genreMap();
+    if (tabIndex == 5 || tabIndex == 7) {
+      return _loadMixedMediaFeed(tabIndex, page, sort, names);
+    }
     final (json, fallback) = await _query(tabIndex, page, sort);
 
     final items = mapTmdbList(
@@ -33,28 +36,77 @@ class TmdbRepository implements ContentRepository {
     return FeedPage(items: items, page: page, hasMore: hasMore);
   }
 
+  Future<FeedPage> _loadMixedMediaFeed(
+    int tabIndex,
+    int page,
+    int sort,
+    Map<int, String> names,
+  ) async {
+    final china = sort == 4;
+    final movieSort = _movieSort(china ? 0 : sort);
+    final tvSort = _tvSort(china ? 0 : sort);
+    final results = await Future.wait<Map<String, dynamic>>([
+      _api.discoverMovie(
+        page,
+        genres: tabIndex == 5 ? '16' : '99',
+        originCountry: china ? 'CN' : null,
+        sortBy: movieSort.$1,
+        extra: movieSort.$2,
+      ),
+      _api.discoverTv(
+        page,
+        genres: tabIndex == 5 ? '16' : '99',
+        originCountry: china ? 'CN' : null,
+        sortBy: tvSort.$1,
+        extra: tvSort.$2,
+      ),
+    ]);
+    final movieJson = results[0];
+    final tvJson = results[1];
+    final merged = <VodItem>[];
+    final seen = <String>{};
+    for (final pair in [
+      (json: movieJson, type: 'movie'),
+      (json: tvJson, type: 'tv'),
+    ]) {
+      for (final item in mapTmdbList(pair.json['results'] as List?,
+          fallbackMediaType: pair.type, genreNames: names)) {
+        if (seen.add('${item.mediaType}:${item.id}')) merged.add(item);
+      }
+    }
+    final movieTotal = (movieJson['total_pages'] as int?) ?? page;
+    final tvTotal = (tvJson['total_pages'] as int?) ?? page;
+    final hasMore =
+        page < movieTotal && page < tvTotal && page < 500 && merged.isNotEmpty;
+    return FeedPage(items: merged, page: page, hasMore: hasMore);
+  }
+
   Future<(Map<String, dynamic>, String)> _query(
       int tab, int page, int sort) async {
-    final (mSort, mExtra) = _movieSort(sort);
-    final (tSort, tExtra) = _tvSort(sort);
+    final china = sort == 4;
+    final effectiveSort = china ? 0 : sort;
+    final (mSort, mExtra) = _movieSort(effectiveSort);
+    final (tSort, tExtra) = _tvSort(effectiveSort);
     switch (tab) {
-      case 1: // 推荐：默认用 trending 混合榜；选了排序则退回华语电影发现
-        if (sort == 0) return (await _api.trendingAll(page), 'movie');
+      case 1: // 推荐：默认用 daily trending；选了排序则回到电影发现
+        if (sort == 0) {
+          return (await _api.trendingAll(page, window: 'day'), 'movie');
+        }
         return (
           await _api.discoverMovie(page,
-              originCountry: 'CN', sortBy: mSort, extra: mExtra),
+              originCountry: china ? 'CN' : null, sortBy: mSort, extra: mExtra),
           'movie'
         );
-      case 2: // 电影（偏好中国大陆）
+      case 2: // 电影（全球）
         return (
           await _api.discoverMovie(page,
-              originCountry: 'CN', sortBy: mSort, extra: mExtra),
+              originCountry: china ? 'CN' : null, sortBy: mSort, extra: mExtra),
           'movie'
         );
-      case 3: // 电视剧（中国大陆）
+      case 3: // 电视剧（全球）
         return (
           await _api.discoverTv(page,
-              originCountry: 'CN', sortBy: tSort, extra: tExtra),
+              originCountry: china ? 'CN' : null, sortBy: tSort, extra: tExtra),
           'tv'
         );
       case 4: // 美剧（US）
@@ -63,25 +115,13 @@ class TmdbRepository implements ContentRepository {
               originCountry: 'US', sortBy: tSort, extra: tExtra),
           'tv'
         );
-      case 5: // 动漫（国漫：动画 + 大陆）
+      case 6: // 综艺（真人秀或脱口秀 + 大陆）
         return (
           await _api.discoverTv(page,
-              genres: '16', originCountry: 'CN', sortBy: tSort, extra: tExtra),
-          'tv'
-        );
-      case 6: // 综艺（真人秀/脱口秀 + 大陆）
-        return (
-          await _api.discoverTv(page,
-              genres: '10764,10767',
+              genres: '10764|10767',
               originCountry: 'CN',
               sortBy: tSort,
               extra: tExtra),
-          'tv'
-        );
-      case 7: // 纪录片（纪录 + 大陆）
-        return (
-          await _api.discoverTv(page,
-              genres: '99', originCountry: 'CN', sortBy: tSort, extra: tExtra),
           'tv'
         );
       default:

@@ -63,8 +63,8 @@ class TmdbApi {
     throw TmdbException('request failed: $lastErr');
   }
 
-  Future<Map<String, dynamic>> trendingAll(int page) =>
-      _get('/trending/all/week', {'page': '$page', 'region': 'CN'});
+  Future<Map<String, dynamic>> trendingAll(int page, {String window = 'day'}) =>
+      _get('/trending/all/$window', {'page': '$page', 'region': 'CN'});
 
   /// Multi search (movie + tv + person). Caller drops `person` rows.
   Future<Map<String, dynamic>> searchMulti(String query, int page) =>
