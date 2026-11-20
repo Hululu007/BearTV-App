@@ -1372,6 +1372,26 @@ class _FullscreenPlayerState extends State<_FullscreenPlayer> {
   String? _osd;
   Timer? _osdTimer;
   Timer? _progressTimer;
+  Timer? _overlayIdleTimer;
+  static const _overlayIdleTimeout = Duration(seconds: 5);
+
+  void _resetOverlayIdleTimer() {
+    _overlayIdleTimer?.cancel();
+    if (!_menuOpen && !_episodesOpen) return;
+    _overlayIdleTimer = Timer(_overlayIdleTimeout, () {
+      if (mounted) _closeOverlays();
+    });
+  }
+
+  // Observe keys before focus dispatch, including events consumed by chips.
+  bool _observeOverlayActivity(KeyEvent event) {
+    if (event is KeyDownEvent ||
+        event is KeyRepeatEvent ||
+        event is KeyUpEvent) {
+      _resetOverlayIdleTimer();
+    }
+    return false;
+  }
 
   /// Back handler registered on the controller so a Back press (whether it
   /// arrives as a key event or a navigation pop) is funnelled through the
@@ -1388,11 +1408,13 @@ class _FullscreenPlayerState extends State<_FullscreenPlayer> {
   void initState() {
     super.initState();
     _app = AppScope.read(context);
+    HardwareKeyboard.instance.addHandler(_observeOverlayActivity);
     _backIntercept = () {
       // A control sheet nested in the menu closes first, keeping the menu open.
       if (_action != null) {
         setState(() => _action = null);
         _actionNodes.focusFirst(_app);
+        _resetOverlayIdleTimer();
         return true;
       }
       if (!_menuOpen && !_episodesOpen && !_downloadOpen) return false;
@@ -1404,6 +1426,7 @@ class _FullscreenPlayerState extends State<_FullscreenPlayer> {
 
   /// Closes whichever overlay is open and hands focus back to the player.
   void _closeOverlays() {
+    _overlayIdleTimer?.cancel();
     setState(() {
       _menuOpen = false;
       _episodesOpen = false;
@@ -1431,6 +1454,8 @@ class _FullscreenPlayerState extends State<_FullscreenPlayer> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_observeOverlayActivity);
+    _overlayIdleTimer?.cancel();
     if (_app.fullscreenBackInterceptor == _backIntercept) {
       _app.fullscreenBackInterceptor = null;
     }
@@ -1473,6 +1498,7 @@ class _FullscreenPlayerState extends State<_FullscreenPlayer> {
         _action = null;
         _menuOpen = true;
       });
+      _resetOverlayIdleTimer();
       return KeyEventResult.handled;
     }
     if (k == LogicalKeyboardKey.arrowDown) {
@@ -1485,6 +1511,7 @@ class _FullscreenPlayerState extends State<_FullscreenPlayer> {
           _action = null;
           _episodesOpen = true;
         });
+        _resetOverlayIdleTimer();
       } else {
         _flashProgress();
       }
@@ -1516,53 +1543,63 @@ class _FullscreenPlayerState extends State<_FullscreenPlayer> {
       // the highlight simply vanished, dead-ending all further arrows.
       skipTraversal: true,
       onKeyEvent: _onKey,
-      child: ColoredBox(
-        color: const Color(0xFF000000),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            const _VideoSurface(),
-            const _DanmakuLayer(),
-            const _StatusOverlay(),
-            const _PlayStateBadge(),
-            const _CacheBadge(),
-            // progress / status scrim
-            if (_showProgress || !app.player.value.playing)
-              const _PlayerControls(),
-            if (_osd != null)
-              Center(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0x99000000),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    _osd!,
-                    style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.text,
-                        fontFamilyFallback: kFontFallback),
+      child: Listener(
+        onPointerDown: (_) => _resetOverlayIdleTimer(),
+        onPointerMove: (_) => _resetOverlayIdleTimer(),
+        onPointerUp: (_) => _resetOverlayIdleTimer(),
+        onPointerSignal: (_) => _resetOverlayIdleTimer(),
+        child: ColoredBox(
+          color: const Color(0xFF000000),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              const _VideoSurface(),
+              const _DanmakuLayer(),
+              const _StatusOverlay(),
+              const _PlayStateBadge(),
+              const _CacheBadge(),
+              // progress / status scrim
+              if (_showProgress || !app.player.value.playing)
+                const _PlayerControls(),
+              if (_osd != null)
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 26, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0x99000000),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      _osd!,
+                      style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.text,
+                          fontFamilyFallback: kFontFallback),
+                    ),
                   ),
                 ),
-              ),
-            if (_menuOpen)
-              _FullscreenMenu(
-                nodes: _actionNodes,
-                onClose: _closeOverlays,
-                onOpenDownloads: () => setState(() {
-                  _menuOpen = false;
-                  _action = null;
-                  _downloadOpen = true;
-                }),
-                onOpenAction: (a) => setState(() => _action = a),
-              ),
-            if (_menuOpen && _action != null) _ActionSheet(action: _action!),
-            if (_episodesOpen) _EpisodeSheet(onClose: _closeOverlays),
-            if (_downloadOpen) DownloadSheet(onClose: _closeOverlays),
-          ],
+              if (_menuOpen)
+                _FullscreenMenu(
+                  nodes: _actionNodes,
+                  onClose: _closeOverlays,
+                  onOpenDownloads: () => setState(() {
+                    _overlayIdleTimer?.cancel();
+                    _menuOpen = false;
+                    _action = null;
+                    _downloadOpen = true;
+                  }),
+                  onOpenAction: (a) {
+                    setState(() => _action = a);
+                    _resetOverlayIdleTimer();
+                  },
+                ),
+              if (_menuOpen && _action != null) _ActionSheet(action: _action!),
+              if (_episodesOpen) _EpisodeSheet(onClose: _closeOverlays),
+              if (_downloadOpen) DownloadSheet(onClose: _closeOverlays),
+            ],
+          ),
         ),
       ),
     );

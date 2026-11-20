@@ -139,6 +139,44 @@ String? _focusedAction() {
 }
 
 void main() {
+  testWidgets('fullscreen menu idle timeout resets on consumed chip keys',
+      (tester) async {
+    final c = _controller();
+    addTearDown(c.dispose);
+    c.fullscreen = true;
+    await _pump(tester, c);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+    expect(find.text('播放设置'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(seconds: 4));
+    expect(find.text('播放设置'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('播放设置'), findsNothing);
+    expect(c.fullscreen, isTrue);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'fullscreenPlayer');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('fullscreen episode drawer closes after five idle seconds',
+      (tester) async {
+    final c = _controller();
+    addTearDown(c.dispose);
+    c.fullscreen = true;
+    await _pump(tester, c);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(c.fullscreenBackInterceptor!(), isTrue);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+    expect(c.fullscreenBackInterceptor!(), isFalse);
+    expect(c.fullscreen, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('holding left/right accumulates repeated ten-second seeks',
       (tester) async {
     final c = _controller();
