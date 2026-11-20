@@ -139,6 +139,28 @@ String? _focusedAction() {
 }
 
 void main() {
+  testWidgets('holding left/right accumulates repeated ten-second seeks',
+      (tester) async {
+    final c = _controller();
+    addTearDown(c.dispose);
+    c.fullscreen = true;
+    await _pump(tester, c);
+    final start = c.player.value.position;
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    for (var i = 0; i < 5; i++) {
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+    }
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    expect(c.player.value.position, start + const Duration(seconds: 60));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
+    for (var i = 0; i < 2; i++) {
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowLeft);
+    }
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+    expect(c.player.value.position, start + const Duration(seconds: 30));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('side panel is an icon-only grid; sheets open focused',
       (tester) async {
     final c = _controller();

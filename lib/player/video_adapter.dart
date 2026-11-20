@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
@@ -16,6 +15,10 @@ import 'player_controller.dart';
 /// [raw] exposes the current controller so the play screen can mount a
 /// [VideoPlayer] texture; it is null until [open] initialises successfully.
 class VideoAdapter extends ChangeNotifier implements PlayerController {
+  VideoAdapter({VideoPlayerController Function(String)? controllerFactory})
+      : _controllerFactory = controllerFactory;
+
+  final VideoPlayerController Function(String)? _controllerFactory;
   VideoPlayerController? _vp;
   PlayerValue _value = const PlayerValue();
   double _speed = 1.0;
@@ -23,9 +26,10 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
   String? _url;
   bool? _lastCompleted;
   String? _lastError;
-  Timer? _seekTimer;
   Duration? _pendingSeek;
-  bool _seekInFlight = false;
+  Duration? _seekTarget;
+  Future<void>? _seekWorker;
+  int _seekGeneration = 0;
 
   VideoPlayerController? get raw => _vp;
 
@@ -69,6 +73,7 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
   /// Everything else stays on the network backend.
   VideoPlayerController _controllerFor(
       String url, Map<String, String>? headers) {
+    if (_controllerFactory != null) return _controllerFactory(url);
     final uri = Uri.tryParse(url);
     if (uri != null && uri.scheme == 'file') {
       return VideoPlayerController.file(File.fromUri(uri));
@@ -103,7 +108,7 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
       playing: v.isPlaying,
       buffering: v.isBuffering,
       ready: ready ?? v.isInitialized,
-      position: v.position,
+      position: _seekTarget ?? v.position,
       duration: v.duration,
       buffered: _bufferedEnd(v),
       speed: _speed,
@@ -136,35 +141,40 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
   Future<void> togglePlay() => _value.playing ? pause() : play();
 
   @override
-  Future<void> seekTo(Duration position) async {
-    _pendingSeek = position;
-    _seekTimer?.cancel();
-    _seekTimer = Timer(const Duration(milliseconds: 80), () async {
-      if (_seekInFlight) {
-        _seekTimer = Timer(const Duration(milliseconds: 80), () async {
-          final next = _pendingSeek;
-          _pendingSeek = null;
-          if (next != null) await _vp?.seekTo(next);
-        });
-        return;
+  Future<void> seekTo(Duration position) {
+    final vp = _vp;
+    if (vp == null) return Future<void>.value();
+    var target = position < Duration.zero ? Duration.zero : position;
+    if (vp.value.duration > Duration.zero && target > vp.value.duration) {
+      target = vp.value.duration;
+    }
+    _pendingSeek = target;
+    _seekTarget = target;
+    // Publish the requested position immediately: relative key repeats must
+    // accumulate from this target, not from the decoder's stale position.
+    _value = _value.copyWith(position: target, completed: false);
+    notifyListeners();
+    return _seekWorker ??= _drainSeeks(vp, _seekGeneration);
+  }
+
+  Future<void> _drainSeeks(VideoPlayerController vp, int generation) async {
+    // Let synchronous requests coalesce before entering the backend.
+    await Future<void>.value();
+    try {
+      while (generation == _seekGeneration && identical(vp, _vp)) {
+        final target = _pendingSeek;
+        if (target == null) break;
+        _pendingSeek = null;
+        await vp.seekTo(target);
       }
-      final target = _pendingSeek;
-      _pendingSeek = null;
-      if (target == null) return;
-      _seekInFlight = true;
-      try {
-        await _vp?.seekTo(target);
-      } finally {
-        _seekInFlight = false;
-        if (_pendingSeek != null) {
-          _seekTimer = Timer(const Duration(milliseconds: 80), () async {
-            final next = _pendingSeek;
-            _pendingSeek = null;
-            if (next != null) await _vp?.seekTo(next);
-          });
-        }
+    } finally {
+      if (generation == _seekGeneration) {
+        _pendingSeek = null;
+        _seekTarget = null;
+        _seekWorker = null;
+        _sync();
       }
-    });
+    }
   }
 
   @override
@@ -175,9 +185,10 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
   }
 
   Future<void> _disposeInner() async {
-    _seekTimer?.cancel();
-    _seekTimer = null;
+    _seekGeneration++;
     _pendingSeek = null;
+    _seekTarget = null;
+    _seekWorker = null;
     final vp = _vp;
     _vp = null;
     if (vp != null) {
