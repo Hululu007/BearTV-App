@@ -29,8 +29,8 @@ Future<void> _settle(WidgetTester tester) async {
   }
 }
 
-/// Boots the real shell (splash + first feed) so the header and page chrome are
-/// laid out exactly as on a device.
+/// Boots the real shell and first feed so the header and page chrome are laid
+/// out exactly as on a device.
 Future<void> _boot(WidgetTester tester) async {
   for (var i = 0; i < 40; i++) {
     await tester.pump(const Duration(milliseconds: 120));

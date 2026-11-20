@@ -10,7 +10,6 @@ import 'screens/home_screen.dart';
 import 'screens/play_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/splash_screen.dart';
 import 'widgets/dynamic_background.dart';
 import 'widgets/focusable.dart';
 import 'widgets/header_bar.dart';
@@ -31,9 +30,6 @@ class NebulaApp extends StatefulWidget {
 class _NebulaAppState extends State<NebulaApp> with WidgetsBindingObserver {
   late final AppController _controller;
   late final bool _ownsController;
-
-  // Startup splash: shown once over the shell, then removed after its fade-out.
-  bool _showSplash = true;
 
   @override
   void initState() {
@@ -87,20 +83,8 @@ class _NebulaAppState extends State<NebulaApp> with WidgetsBindingObserver {
         useMaterial3: true,
       ),
       home: AppScope(controller: _controller, child: const Shell()),
-      // Zoom the whole UI out so more content is visible on a TV screen. The
-      // splash is layered on top (outside _UiScale) so it fills the raw screen.
-      builder: (context, child) => Stack(
-        fit: StackFit.expand,
-        children: [
-          _UiScale(child: child!),
-          if (_showSplash)
-            SplashScreen(
-              onFinished: () {
-                if (mounted) setState(() => _showSplash = false);
-              },
-            ),
-        ],
-      ),
+      // Zoom the whole UI out so more content is visible on a TV screen.
+      builder: (context, child) => _UiScale(child: child!),
     );
   }
 }
