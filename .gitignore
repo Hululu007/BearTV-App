@@ -35,3 +35,6 @@ ios/
 
 # python helper cache (tool/)
 __pycache__/
+
+# agent
+.workbuddy/

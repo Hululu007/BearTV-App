@@ -46,6 +46,61 @@ VodDetail _detail(String site, {String title = '三体', int eps = 2}) => VodDet
     );
 
 void main() {
+  test('fallback races two details and stops scheduling after a winner',
+      () async {
+    final client = _FakeClient();
+    final slow = Completer<VodDetail?>();
+    final calls = <String>[];
+    client.searches['a'] = () async => [
+          for (var i = 0; i < 8; i++) _hit('a', '三体 版本$i', vodId: '$i'),
+        ];
+    client.details['a'] = (id) {
+      calls.add(id);
+      return id == '0' ? slow.future : Future.value(_detail('a'));
+    };
+    final repo = VodRepository(client: client);
+    final result = await repo.resolveByTitle('三体', [_siteA]);
+    expect(result, isNotNull);
+    expect(calls, ['0', '1']);
+    expect(slow.isCompleted, isFalse);
+    slow.complete(null);
+    repo.close();
+  });
+
+  test('fallback tolerates failures and caps total attempts at six', () async {
+    final client = _FakeClient();
+    var active = 0, maxActive = 0, calls = 0;
+    client.searches['a'] = () async => [
+          for (var i = 0; i < 9; i++) _hit('a', '三体 $i', vodId: '$i'),
+        ];
+    client.details['a'] = (_) async {
+      calls++;
+      active++;
+      if (active > maxActive) maxActive = active;
+      await Future<void>.delayed(Duration.zero);
+      active--;
+      throw StateError('provider failed');
+    };
+    final repo = VodRepository(client: client);
+    expect(await repo.resolveByTitle('三体', [_siteA]), isNull);
+    expect(calls, 6);
+    expect(maxActive, 2);
+    repo.close();
+  });
+
+  test('exact match folds width and whitespace without stripping seasons',
+      () async {
+    final client = _FakeClient();
+    final slow = Completer<List<SearchHit>>();
+    client.searches['a'] = () async => [_hit('a', ' ＦＯＯ　第２季 ')];
+    client.searches['b'] = () => slow.future;
+    client.details['a'] = (_) async => _detail('a');
+    final repo = VodRepository(client: client);
+    expect(await repo.resolveByTitle('foo第2季', [_siteA, _siteB]), isNotNull);
+    slow.complete([]);
+    repo.close();
+  });
+
   test('returns the first exact hit without waiting for a slow source',
       () async {
     final client = _FakeClient();

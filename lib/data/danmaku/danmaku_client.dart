@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'danmaku_models.dart';
@@ -121,7 +122,8 @@ class DanmakuClient {
       _commentTimeout,
     );
     try {
-      return parseDanmakuXml(utf8.decode(res.bodyBytes));
+      return await compute(_parseDanmakuBytes, res.bodyBytes,
+          debugLabel: 'danmaku-xml');
     } catch (_) {
       throw DanmakuRequestException('获取弹幕返回了无法解析的响应');
     }
@@ -200,6 +202,10 @@ final RegExp _dTag = RegExp(
   '<d\\s+p="([^"]*)"[^>]*>(.*?)</d>',
   dotAll: true,
 );
+
+/// Top-level callback avoids capturing the HTTP client or controller state.
+List<DanmakuItem> _parseDanmakuBytes(List<int> bytes) =>
+    parseDanmakuXml(utf8.decode(bytes));
 
 /// Parse a bilibili-style danmaku XML document into sorted [DanmakuItem]s.
 ///

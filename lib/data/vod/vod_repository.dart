@@ -21,7 +21,12 @@ class VodRepository {
     _client.close();
   }
 
-  static String _norm(String v) => v.trim().toLowerCase();
+  static String _norm(String v) {
+    final folded = String.fromCharCodes(
+        v.runes.map((r) => r >= 0xFF01 && r <= 0xFF5E ? r - 0xFEE0 : r));
+    // Preserve punctuation, years and season numbers: those distinguish works.
+    return folded.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+  }
 
   // --- Short-lived request memo --------------------------------------------
   //
@@ -113,9 +118,9 @@ class VodRepository {
   /// Sources are searched concurrently and the first source that returns an
   /// exact-title hit has its detail probed immediately — we return as soon as
   /// any exact hit is playable instead of waiting for the slowest source. Only
-  /// when no source has an exact hit do we fall back to the remaining hits
-  /// (in source order) once every search has answered. Capped attempts keep it
-  /// light on low-end hardware.
+  /// when exact probes have no playable result do we fall back to the remaining
+  /// hits once every search has answered. Fallback schedules in source order
+  /// with at most two concurrent probes and a shared six-attempt limit.
   Future<VodDetail?> resolveByTitle(String title, List<CmsSite> sites) async {
     final query = title.trim();
     if (query.isEmpty || sites.isEmpty) return null;
@@ -180,15 +185,42 @@ class VodRepository {
     final exact = await done.future;
     if (exact != null) return exact;
 
-    // Nothing matched exactly. Walk the remaining hits in source order.
+    // Nothing matched exactly. Probe at most two candidates concurrently,
+    // retaining source order for scheduling and the shared total attempt cap.
+    final candidates = <(CmsSite, SearchHit)>[];
     for (final site in sites) {
       for (final hit in restBySite[site.id] ?? const <SearchHit>[]) {
-        if (attempts++ >= maxAttempts) return null;
-        final detail = await _detailOf(site, hit.vodId);
-        if (detail != null && detail.firstEpisode != null) return detail;
+        if (candidates.length >= maxAttempts - attempts) break;
+        candidates.add((site, hit));
       }
     }
-    return null;
+    if (candidates.isEmpty) return null;
+    final fallback = Completer<VodDetail?>();
+    var cursor = 0;
+    var workers = candidates.length < 2 ? candidates.length : 2;
+    Future<void> probeRemaining() async {
+      try {
+        while (!fallback.isCompleted && cursor < candidates.length) {
+          final (site, hit) = candidates[cursor++];
+          try {
+            final detail = await _detailOf(site, hit.vodId);
+            if (!fallback.isCompleted && detail?.firstEpisode != null) {
+              fallback.complete(detail);
+            }
+          } catch (_) {
+            // One broken provider must not prevent trying the next candidate.
+          }
+        }
+      } finally {
+        workers--;
+        if (workers == 0 && !fallback.isCompleted) fallback.complete(null);
+      }
+    }
+
+    for (var i = 0; i < (candidates.length < 2 ? candidates.length : 2); i++) {
+      unawaited(probeRemaining());
+    }
+    return fallback.future;
   }
 
   /// Build the cross-source "switch resource" candidate list for [title].
