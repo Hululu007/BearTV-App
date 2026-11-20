@@ -132,7 +132,18 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
   }
 
   @override
-  Future<void> play() async => _vp?.play();
+  Future<void> play() async {
+    final vp = _vp;
+    if (vp == null) return;
+    await vp.play();
+    if (identical(vp, _vp)) {
+      // Some Android/fvp backends restore their native rate when transitioning
+      // from prepared/paused to playing. Apply the requested rate after play,
+      // which is the narrow fix for "UI says 2x/3x but playback is 1x".
+      await vp.setPlaybackSpeed(_speed);
+      _sync();
+    }
+  }
 
   @override
   Future<void> pause() async => _vp?.pause();
@@ -179,8 +190,12 @@ class VideoAdapter extends ChangeNotifier implements PlayerController {
 
   @override
   Future<void> setSpeed(double speed) async {
+    if (!speed.isFinite || speed <= 0) {
+      throw ArgumentError.value(speed, 'speed', 'Must be finite and positive');
+    }
     _speed = speed;
-    await _vp?.setPlaybackSpeed(speed);
+    final vp = _vp;
+    if (vp != null) await vp.setPlaybackSpeed(speed);
     _sync();
   }
 

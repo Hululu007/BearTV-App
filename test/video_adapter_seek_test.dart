@@ -11,6 +11,7 @@ class _Player extends VideoPlayerController {
   final gates = <Completer<void>>[];
   int active = 0;
   int maxActive = 0;
+  double effectiveSpeed = 1;
 
   @override
   Future<void> initialize() async {
@@ -22,7 +23,16 @@ class _Player extends VideoPlayerController {
   }
 
   @override
-  Future<void> setPlaybackSpeed(double speed) async {}
+  Future<void> setPlaybackSpeed(double speed) async {
+    effectiveSpeed = speed;
+    value = value.copyWith(playbackSpeed: speed);
+  }
+
+  @override
+  Future<void> play() async {
+    effectiveSpeed = 1; // Simulate a backend resetting rate on playback start.
+    value = value.copyWith(isPlaying: true);
+  }
 
   @override
   Future<void> seekTo(Duration position) async {
@@ -32,6 +42,7 @@ class _Player extends VideoPlayerController {
     final gate = Completer<void>();
     gates.add(gate);
     await gate.future;
+    effectiveSpeed = 1; // Simulate a seek resetting native playback rate.
     active--;
     value = value.copyWith(position: position);
   }
@@ -43,6 +54,17 @@ class _Player extends VideoPlayerController {
 }
 
 void main() {
+  test('remembered rate is reapplied after play starts', () async {
+    final backend = _Player();
+    final adapter = VideoAdapter(controllerFactory: (_) => backend);
+    await adapter.setSpeed(3);
+    await adapter.open('https://example.test/video');
+    await adapter.play();
+    expect(backend.effectiveSpeed, 3);
+    expect(adapter.value.speed, 3);
+    adapter.dispose();
+  });
+
   test('held-key targets accumulate while seeks serialize and coalesce',
       () async {
     final backend = _Player();
