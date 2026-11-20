@@ -607,6 +607,8 @@ class DownloadManager extends ChangeNotifier {
           ? null
           : _store.snapshot('$sourceId:$vodId');
 
+  Future<void> updateSnapshot(VodDetail detail) => _store.saveSnapshot(detail);
+
   VodDetail? snapshotForEntry(HistoryEntry? entry) {
     if (entry == null) return null;
     return snapshotFor(entry.sourceId, entry.vodId);

@@ -984,6 +984,7 @@ class AppController extends ChangeNotifier {
     HistoryEntry? entry,
     AppPage? returnPage,
   }) async {
+    final playToken = _playToken;
     _playStarted = false;
     currentItem = item;
     _playReturnPage = returnPage ??
@@ -1040,7 +1041,84 @@ class AppController extends ChangeNotifier {
     notifyListeners();
 
     await _playCurrent(resumeMs: resumeMs);
+    if (playToken != _playToken) return;
+    unawaited(_updateDownloadedCatalogue(playToken));
     _scheduleResourceOptions();
+  }
+
+  /// Playback has already opened from disk. Only replace catalogue metadata;
+  /// never open/seek/pause the player as part of this background operation.
+  Future<void> _updateDownloadedCatalogue(int token) async {
+    final original = currentDetail;
+    if (original == null) return;
+    final site = _siteById(original.sourceId);
+    if (site == null) return;
+    try {
+      final fresh = await vodRepo.latestDetail(site, original.vodId);
+      if (token != _playToken ||
+          !identical(currentDetail, original) ||
+          fresh == null ||
+          fresh.key != original.key ||
+          fresh.firstEpisode == null) {
+        return;
+      }
+
+      // Read the current selection AFTER the await: the user may have changed
+      // episodes while the request was in flight.
+      final oldLine = original.playLines[lineIndex];
+      final episode = _episodeAt(lineIndex, episodeIndex);
+      if (episode == null) return;
+      final lines = [
+        for (final line in fresh.playLines)
+          PlayLine(name: line.name, episodes: [...line.episodes]),
+      ];
+      // Retain old episodes/lines that have disappeared upstream so downloaded
+      // episodes remain accessible offline. Existing task records are untouched.
+      for (final old in original.playLines) {
+        var index = lines.indexWhere((line) => line.name == old.name);
+        if (index < 0) {
+          lines.add(PlayLine(name: old.name, episodes: [...old.episodes]));
+          continue;
+        }
+        for (final ep in old.episodes) {
+          if (!lines[index].episodes.any((candidate) => sameEpisode(
+              urlA: ep.url,
+              titleA: ep.title,
+              urlB: candidate.url,
+              titleB: candidate.title))) {
+            lines[index].episodes.add(ep);
+          }
+        }
+      }
+      final selectedLine =
+          lines.indexWhere((line) => line.name == oldLine.name);
+      final selectedEpisode = lines[selectedLine].episodes.indexWhere((ep) =>
+          sameEpisode(
+              urlA: episode.url,
+              titleA: episode.title,
+              urlB: ep.url,
+              titleB: ep.title));
+      if (selectedEpisode < 0) return;
+      // Keep the active episode's URL identity in sync with the actual player.
+      lines[selectedLine].episodes[selectedEpisode] = episode;
+      final updated = VodDetail(
+        sourceId: fresh.sourceId,
+        sourceName: fresh.sourceName,
+        vodId: fresh.vodId,
+        title: fresh.title,
+        cover: fresh.cover,
+        desc: fresh.desc,
+        remarks: fresh.remarks,
+        playLines: lines,
+      );
+      currentDetail = updated;
+      lineIndex = selectedLine;
+      episodeIndex = selectedEpisode;
+      notifyListeners();
+      await downloads.updateSnapshot(updated);
+    } catch (_) {
+      // Offline/unavailable source: keep both playback and the old snapshot.
+    }
   }
 
   /// Open the current (lineIndex/episodeIndex) episode in the player.

@@ -258,6 +258,12 @@ class VodRepository {
   /// that wasn't pre-resolved).
   Future<VodDetail?> detail(CmsSite site, String vodId) =>
       _detailOf(site, vodId);
+
+  /// Bypass the short playback-start memo when updating an offline catalogue.
+  Future<VodDetail?> latestDetail(CmsSite site, String vodId) {
+    _detailMemo.remove('${site.id}\u0000$vodId');
+    return _detailOf(site, vodId);
+  }
 }
 
 /// One memoized in-flight/complete request plus when it was issued.

@@ -23,6 +23,9 @@ import 'package:bear_tv/player/player_controller.dart';
 /// [VodRepository] with one canned detail, no network.
 class _FakeVod extends VodRepository {
   @override
+  Future<VodDetail?> latestDetail(CmsSite site, String vodId) =>
+      detail(site, vodId);
+  @override
   Future<VodDetail?> detail(CmsSite site, String vodId) async => _detail;
 
   @override
@@ -38,9 +41,20 @@ class _FakeVod extends VodRepository {
       const [];
 }
 
+class _UpdatingVod extends _FakeVod {
+  final response = Completer<VodDetail?>();
+
+  @override
+  Future<VodDetail?> latestDetail(CmsSite site, String vodId) =>
+      response.future;
+}
+
 /// A repository that only knows a *different* source. 去播放 must never reach
 /// it: the download group's own snapshot is what gets played.
 class _OtherVod extends VodRepository {
+  @override
+  Future<VodDetail?> latestDetail(CmsSite site, String vodId) =>
+      detail(site, vodId);
   @override
   Future<VodDetail?> detail(CmsSite site, String vodId) async => _otherDetail;
 
@@ -73,6 +87,9 @@ const _otherDetail = VodDetail(
 
 /// A repository that can never answer — offline, or the source is gone.
 class _OfflineVod extends VodRepository {
+  @override
+  Future<VodDetail?> latestDetail(CmsSite site, String vodId) =>
+      detail(site, vodId);
   @override
   Future<VodDetail?> detail(CmsSite site, String vodId) async => null;
 
@@ -265,12 +282,12 @@ class _ProgressiveEngine implements DownloadEngine {
     File('${dir!.path}/index.m3u8')
         .writeAsStringSync('#EXTM3U\n#EXT-X-ENDLIST\n');
     _pending.remove(id)!.complete(const DownloadResult(
-      relativePath: 'index.m3u8',
-      isHls: true,
-      bytes: 100,
-      durationMs: totalMs,
-      totalSegments: 20,
-    ));
+          relativePath: 'index.m3u8',
+          isHls: true,
+          bytes: 100,
+          durationMs: totalMs,
+          totalSegments: 20,
+        ));
   }
 
   @override
@@ -342,7 +359,8 @@ void main() {
         episodeIndices: cachedEpisodes,
       ));
       if (progressive) {
-        await waitUntil(() => manager.activeTasks.isNotEmpty &&
+        await waitUntil(() =>
+            manager.activeTasks.isNotEmpty &&
             manager.activeTasks.first.playableMs > 0);
       } else {
         for (var i = 0; i < 200 && manager.activeCount > 0; i++) {
@@ -368,6 +386,39 @@ void main() {
 
   DownloadTask completed(int episodeIndex) =>
       manager.completedTasks.firstWhere((t) => t.episodeIndex == episodeIndex);
+
+  test(
+      'cached playback starts before latest episodes arrive and is not reopened',
+      () async {
+    final vod = _UpdatingVod();
+    await setUpController(cachedEpisodes: [1], vod: vod);
+    await c.openTitle(_item);
+    expect(player.value.playing, isTrue);
+    final opened = [...player.opened];
+    final position = player.value.position;
+    c.setFullscreen(true);
+    vod.response.complete(VodDetail(
+      sourceId: _detail.sourceId,
+      sourceName: _detail.sourceName,
+      vodId: _detail.vodId,
+      title: _detail.title,
+      playLines: [
+        PlayLine(name: '线路1', episodes: [
+          ..._detail.playLines.first.episodes,
+          const Episode(title: '第4集', url: 'https://cdn.test/1/ep3.m3u8'),
+        ]),
+      ],
+    ));
+    await waitUntil(() => c.currentEpisodes.length == 4);
+    expect(c.currentEpisodes.length, 4);
+    expect(c.episodeIndex, 1);
+    expect(player.opened, opened);
+    expect(player.value.position, position);
+    expect(player.value.playing, isTrue);
+    expect(c.fullscreen, isTrue);
+    expect(manager.snapshotFor('src1', 'vod1')!.playLines.first.episodes.length,
+        4);
+  });
 
   test('a cached recorded episode plays from the local file', () async {
     await setUpController(cachedEpisodes: [0, 1]);
@@ -600,9 +651,7 @@ void main() {
     test('a record on this source at an undownloaded episode keeps the episode',
         () async {
       await setUpController(
-          cachedEpisodes: [0],
-          recordedEpisode: 1,
-          vod: _OtherVod());
+          cachedEpisodes: [0], recordedEpisode: 1, vod: _OtherVod());
 
       c.openDownloads();
       await c.openDownloadGroup(group());
