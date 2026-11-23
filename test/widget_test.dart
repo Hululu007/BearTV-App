@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bear_tv/app.dart';
 import 'package:bear_tv/core/app_controller.dart';
@@ -20,6 +21,48 @@ Future<void> _settle(WidgetTester tester) async {
 const _sizes = [Size(1280, 720), Size(1920, 1080), Size(960, 540)];
 
 void main() {
+  testWidgets('tab vertical navigation stays deterministic after visiting mine',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1920, 1080);
+    addTearDown(tester.view.reset);
+    final c = AppController(repository: FakeRepo());
+    addTearDown(c.dispose);
+    await tester.pumpWidget(NebulaApp(controller: c));
+    await _settle(tester);
+    Future<void> press(LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
+    }
+
+    await press(LogicalKeyboardKey.arrowLeft);
+    expect(c.currentTab, 0);
+    expect(FocusManager.instance.primaryFocus, c.activeTabFocusNode);
+    await press(LogicalKeyboardKey.arrowDown);
+    expect(c.currentTab, 0);
+    c.focusActiveTab();
+    await tester.pump();
+    await press(LogicalKeyboardKey.arrowRight);
+    expect(c.currentTab, 1);
+    await press(LogicalKeyboardKey.arrowDown);
+    expect(c.currentTab, 1);
+    expect(FocusManager.instance.primaryFocus, isNot(c.activeTabFocusNode));
+    c.focusActiveTab();
+    await tester.pump();
+    for (var i = 0; i < 3; i++) {
+      await press(LogicalKeyboardKey.arrowRight);
+      final tab = c.currentTab;
+      await press(LogicalKeyboardKey.arrowUp);
+      expect(c.currentTab, tab);
+      expect(FocusManager.instance.primaryFocus, c.searchToolFocusNode);
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(c.currentTab, tab);
+      expect(FocusManager.instance.primaryFocus, c.activeTabFocusNode);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   final overflows = <String>[];
 
   setUp(() {

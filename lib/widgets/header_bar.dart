@@ -262,7 +262,7 @@ class _NavTab extends StatelessWidget {
       onPressed: () => app.setTab(index),
       // The tab strip owns horizontal movement: Left/Right step between tabs
       // (and switch), consumed at both ends so focus never escapes sideways to
-      // the tools. Up/Down fall through to default traversal (tools / content).
+      // the tools. Up targets search; Down enters the current page's content.
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
           return KeyEventResult.ignored;
@@ -274,6 +274,31 @@ class _NavTab extends StatelessWidget {
         }
         if (k == LogicalKeyboardKey.arrowRight) {
           if (rightIndex != null) onFocusSibling(rightIndex!);
+          return KeyEventResult.handled;
+        }
+        if (k == LogicalKeyboardKey.arrowUp) {
+          app.searchToolFocusNode?.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (k == LogicalKeyboardKey.arrowDown) {
+          // Explicit crossing avoids directional traversal's cached return
+          // path resurrecting a previously focused (and auto-selected) tab.
+          final candidates = node.nearestScope?.traversalDescendants.where((n) {
+                final context = n.context;
+                return !n.skipTraversal &&
+                    n.canRequestFocus &&
+                    !n.rect.isEmpty &&
+                    context != null &&
+                    context.findAncestorWidgetOfExactType<HeaderBar>() == null;
+              }).toList() ??
+              <FocusNode>[];
+          candidates.sort((a, b) {
+            final vertical = a.rect.top.compareTo(b.rect.top);
+            return vertical != 0
+                ? vertical
+                : a.rect.left.compareTo(b.rect.left);
+          });
+          if (candidates.isNotEmpty) candidates.first.requestFocus();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -324,12 +349,31 @@ class _NavTab extends StatelessWidget {
   }
 }
 
-class _Tools extends StatelessWidget {
+class _Tools extends StatefulWidget {
   const _Tools();
+
+  @override
+  State<_Tools> createState() => _ToolsState();
+}
+
+class _ToolsState extends State<_Tools> {
+  final _searchNode = FocusNode(debugLabel: 'headerSearch');
+  AppController? _app;
+
+  @override
+  void dispose() {
+    if (_app?.searchToolFocusNode == _searchNode) {
+      _app!.searchToolFocusNode = null;
+    }
+    _searchNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    _app = app;
+    app.searchToolFocusNode = _searchNode;
     // On the player page the search/settings entries are irrelevant and only
     // clutter the overlay, so show just the clock there.
     final showEntries = app.page != AppPage.play;
@@ -337,7 +381,10 @@ class _Tools extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (showEntries) ...[
-          _RoundTool(icon: '🔍', onPressed: () => app.openSearch()),
+          _RoundTool(
+              icon: '🔍',
+              focusNode: _searchNode,
+              onPressed: () => app.openSearch()),
           const SizedBox(width: 14),
           _RoundTool(icon: '⚙', onPressed: () => app.openSettings()),
           const SizedBox(width: 14),
@@ -349,7 +396,9 @@ class _Tools extends StatelessWidget {
 }
 
 class _RoundTool extends StatelessWidget {
-  const _RoundTool({required this.icon, required this.onPressed});
+  const _RoundTool(
+      {required this.icon, required this.onPressed, this.focusNode});
+  final FocusNode? focusNode;
   final String icon;
   final VoidCallback onPressed;
 
@@ -357,6 +406,7 @@ class _RoundTool extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppScope.read(context);
     return Focusable(
+      focusNode: focusNode,
       onPressed: onPressed,
       // Down from a tool enters the tab strip on the *current* tab (e.g. 推荐),
       // instead of geometric traversal picking the nearest tab below-right (the

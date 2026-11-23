@@ -243,7 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: '最近播放',
                   subtitle: '继续未看完的内容 · 菜单键删除记录',
                   items: recent,
-                  autofocusFirst: true,
+                  autofocusFirst: false,
                   onCardKeyEvent: _topRailUp,
                   onCardMenu: (item) => setState(() => _deleteTarget = item),
                   focusNodeForItem: (item) => _recentNode(item.key),
@@ -252,7 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   timeForItem: (item) => _recentTime(app, item),
                 ),
               const SizedBox(height: 36),
-              _MineDownloadsEntry(app: app, autofocus: recent.isEmpty),
+              _MineDownloadsEntry(app: app, autofocus: false),
               const SizedBox(height: 80),
             ],
           ),
@@ -279,6 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final app = AppScope.read(context);
+      if (app.page != AppPage.home || app.currentTab != 0) return;
       final recent = app.continueWatch as List;
       if (recent.isNotEmpty) {
         _recentNode(recent.first.key as String).requestFocus();

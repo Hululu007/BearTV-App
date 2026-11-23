@@ -221,6 +221,7 @@ class AppController extends ChangeNotifier {
   /// *current* tab via [focusActiveTab] — never whichever tab happens to sit
   /// geometrically above the focused card. Cleared when the strip is disposed.
   FocusNode? activeTabFocusNode;
+  FocusNode? searchToolFocusNode;
 
   /// Move focus onto the active nav tab. Used by the top content row (Up) and
   /// the header tools (Down) to enter the tab strip deterministically. Returns
