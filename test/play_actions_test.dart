@@ -139,6 +139,32 @@ String? _focusedAction() {
 }
 
 void main() {
+  for (final action in ['speed', 'danmaku', 'sources', 'skip']) {
+    testWidgets('nested $action sheet suspends menu idle timeout',
+        (tester) async {
+      final c = _controller(lines: 2);
+      addTearDown(c.dispose);
+      c.fullscreen = true;
+      await _pump(tester, c);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(seconds: 4));
+      await tester.tap(_tile(action));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(seconds: 10));
+      expect(find.text('播放设置'), findsOneWidget);
+      // Returning to the menu starts a fresh five-second interval.
+      c.fullscreenBackInterceptor!();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 4));
+      expect(find.text('播放设置'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('播放设置'), findsNothing);
+      expect(c.fullscreen, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets('fullscreen menu idle timeout resets on consumed chip keys',
       (tester) async {
     final c = _controller();

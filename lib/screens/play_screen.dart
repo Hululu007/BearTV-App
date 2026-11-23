@@ -1377,7 +1377,11 @@ class _FullscreenPlayerState extends State<_FullscreenPlayer> {
 
   void _resetOverlayIdleTimer() {
     _overlayIdleTimer?.cancel();
-    if (!_menuOpen && !_episodesOpen) return;
+    // Nested tools may wait on network results or require lengthy edits.
+    // Only the top-level menu and episode drawer are transient.
+    if (_action != null || _downloadOpen || (!_menuOpen && !_episodesOpen)) {
+      return;
+    }
     _overlayIdleTimer = Timer(_overlayIdleTimeout, () {
       if (mounted) _closeOverlays();
     });
